@@ -1,0 +1,7 @@
+Site,Slope,n,R-squared,Area,Description,Stream
+LMP,0.865,0.88106,0.96,476.9,Lamprey,Lamprey
+DCF,1.112,1.12613,0.96,7,Ag dominated,Dowst-Cate Forest
+HBF,0.927,0.93197,0.92,0.4,Wetland dominated,Hubbard Brook Forest
+BEF,0.946,0.94877,0.91,13.7,Bartlett,Bartlett Experimental Forest
+BDC,0.668,0.75075,0.91,0.3,Burley,Burley-Demerritt Creek
+WHB,1.026,1.02669,0.94,0.3,Wednesday Hill Brook,Wednesday Hill Brook
