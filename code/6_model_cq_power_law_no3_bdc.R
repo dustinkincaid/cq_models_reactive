@@ -11,7 +11,7 @@
   library("doParallel")   # for faster computing
   library("scico")        # color palette for ggplot2
   library("minpack.lm")   # alternative to 'nls'; much more flexible!
-  library("scales")
+  # library("scales")       # used for plotting on log scales
 
 # Which site and solute would you like to model?
   site_choice <- "BDC"
