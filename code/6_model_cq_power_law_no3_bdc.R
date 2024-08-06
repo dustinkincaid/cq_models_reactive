@@ -11,7 +11,7 @@
   library("doParallel")   # for faster computing
   library("scico")        # color palette for ggplot2
   library("minpack.lm")   # alternative to 'nls'; much more flexible!
-  # library("scales")       # used for plotting on log scales
+  
 
 # Which site and solute would you like to model?
   site_choice <- "BDC"
@@ -110,7 +110,9 @@
     df_sub %>% 
     filter(!is.na(!!as.symbol(grab_choice))) %>% 
     filter(!is.na(q)) %>% 
-    rename(c = !!as.symbol(grab_choice)) 
+    rename(c = !!as.symbol(grab_choice))
+  
+  rm(df_sub)
   
 # Reduce sensor data to the various sampling times (ie, daily, weekly, monthly) ----
   # Here we create 10 versions of each sampling frequency (e.g., df_15min_daily_1 through df_15min_daily_10)  
@@ -171,6 +173,19 @@
                   df_15min_daily_list[[1]],
                   df_15min_weekly_list[[1]],
                   df_15min_monthly_list[[1]])
+  
+  # Write these data to CSV for future use
+  df_grab %>% 
+    mutate(df = "lt_grab") %>% 
+    bind_rows(df_15min %>% 
+                mutate(df = "15min"),
+              df_15min_daily_list[[1]] %>% 
+                mutate(df = "daily"),
+              df_15min_weekly_list[[1]] %>% 
+                mutate(df = "weekly"),
+              df_15min_monthly_list[[1]] %>% 
+                mutate(df = "monthly")) %>% 
+    write_csv(here("data", "out", paste0("cq_all_datasets", "_", sol_choice, "_", site_choice, ".csv")))  
   
   ## Fit models, save residuals, and create plot df ----
     ### c0 = c0_bf ----
@@ -459,16 +474,25 @@
         
     }
     
-      # Remove objects
-      rm(eq0_fit, eq1_fit, eq1_nFit_fit, eq2_fit, eq2_nFit_fit, eq3_fit, eq4_fit,
-         eq4_nFit_fit, eq5_fit, eq5_nFit_fit, eq6_fit, eq6_nFit_fit, eq7_fit,
-         eq7_nFit_fit, eq8_fit, eq8_nFit_fit,
-         eq0_resids, eq1_resids, eq1_nFit_resids, eq2_resids, eq2_nFit_resids, eq3_resids, eq4_resids,
-         eq4_nFit_resids, eq5_resids, eq5_nFit_resids, eq6_resids, eq6_nFit_resids, eq7_resids,
-         eq7_nFit_resids, eq8_resids, eq8_nFit_resids)    
+    # Write to CSV for future use
+    resids_final %>% 
+      write_csv(here("data", "out",  paste0("cq_all_resids", "_", "baseflow", "_", sol_choice, "_", site_choice, ".csv")))
+    bdf_all %>% 
+      write_csv(here("data", "out", paste0("cq_all_bdf", "_", "baseflow", "_", sol_choice, "_", site_choice, ".csv")))
+    plot_df_all %>% 
+      write_csv(here("data", "out",  paste0("cq_all_fits", "_", "baseflow", "_", sol_choice, "_", site_choice, ".csv")))    
+    
+    # Remove objects
+    rm(eq0_fit, eq1_fit, eq1_nFit_fit, eq2_fit, eq2_nFit_fit, eq3_fit, eq4_fit,
+       eq4_nFit_fit, eq5_fit, eq5_nFit_fit, eq6_fit, eq6_nFit_fit, eq7_fit,
+       eq7_nFit_fit, eq8_fit, eq8_nFit_fit,
+       eq0_resids, eq1_resids, eq1_nFit_resids, eq2_resids, eq2_nFit_resids, eq3_resids, eq4_resids,
+       eq4_nFit_resids, eq5_resids, eq5_nFit_resids, eq6_resids, eq6_nFit_resids, eq7_resids,
+       eq7_nFit_resids, eq8_resids, eq8_nFit_resids)    
   
     
     ### REPEAT where c0 = c0_wd ----
+    ### Only need to re-run models with C0 as input
     c0_set <- c0_wd
     
     # i = 1
@@ -592,12 +616,11 @@
       # get dfs ready for ggplot
       bdf <- data.frame(bqs,bcs,sigmas) %>% 
         mutate(df = as.character(df_list[[i]][1, "df"]))
-      plotdf = data.frame(df_list[[i]]$q, predict(eq0_fit), predict(eq1_fit), predict(eq1_nFit_fit),
-                          predict(eq2_fit), predict(eq2_nFit_fit), predict(eq3_fit), predict(eq4_fit), 
-                          predict(eq4_nFit_fit), predict(eq5_fit), predict(eq5_nFit_fit), predict(eq6_fit),
-                          predict(eq6_nFit_fit), predict(eq7_fit), predict(eq7_nFit_fit), predict(eq8_fit), predict(eq8_nFit_fit))
-      colnames(plotdf) = c('q','eq0','eq1','eq1_nFit','eq2','eq2_nFit','eq3','eq4','eq4_nFit',
-                           'eq5','eq5_nFit','eq6','eq6_nFit','eq7','eq7_nFit','eq8','eq8_nFit')
+      plotdf = data.frame(df_list[[i]]$q, 
+                          predict(eq2_fit), predict(eq2_nFit_fit), 
+                          predict(eq5_fit), predict(eq5_nFit_fit), 
+                          predict(eq8_fit), predict(eq8_nFit_fit))
+      colnames(plotdf) = c('q','eq2','eq2_nFit','eq5','eq5_nFit','eq8','eq8_nFit')
       
       plotdf <- melt(plotdf,  id.vars = 'q', variable.name = 'model') %>% 
         mutate(df = as.character(df_list[[i]][1, "df"]))
@@ -609,7 +632,19 @@
       plot_df_all_2 <- bind_rows(plot_df_all_2, plotdf) %>% 
         mutate(c0_source = "wet_deposition",
                c0_value = c0_wd)      
-    }        
+    }
+    
+    # Write to CSV for future use
+    resids_final_2 %>% 
+      write_csv(here("data", "out",  paste0("cq_all_resids", "_", "wetdep", "_", sol_choice, "_", site_choice, ".csv")))
+    bdf_all_2 %>% 
+      write_csv(here("data", "out", paste0("cq_all_bdf", "_", "wetdep", "_", sol_choice, "_", site_choice, ".csv")))
+    plot_df_all_2 %>% 
+      write_csv(here("data", "out",  paste0("cq_all_fits", "_", "wetdep", "_", sol_choice, "_", site_choice, ".csv")))    
+    
+    # Remove objects
+    rm(eq2_fit, eq2_nFit_fit, eq5_fit, eq5_nFit_fit, eq8_fit, eq8_nFit_fit,
+       eq2_resids, eq2_nFit_resids, eq5_resids, eq5_nFit_resids, eq8_resids, eq8_nFit_resids)      
   
   
   ## Evaluate model performance using repeated K/V-fold cross-validation ----    
@@ -932,466 +967,10 @@
         out2_c0_2 <- bind_rows(out2_c0_2, out2)
       }      
 
+      # Write to CSV for future use
+      out1_c0_1 %>%
+        bind_rows(out1_c0_2,
+                  out2_c0_1,
+                  out2_c0_2) %>% 
+        write_csv(here("data", "out",  paste0("cq_all_cv", "_", sol_choice, "_", site_choice, ".csv")))    
       
-# END code that requires repeating for each dataset; you can move on from here if you've run all the datasets you want ----
-      
-# Aggregate and plot results from above ----      
-  ## Plot reduced sensor data & model fits ----
-    # Create a single df for cq data
-    df_all <-
-      df_grab %>% 
-      mutate(df = "lt_grab") %>% 
-      bind_rows(df_15min %>% 
-                  mutate(df = "15min"),
-                df_15min_daily_list[[1]] %>% 
-                  mutate(df = "daily"),
-                df_15min_weekly_list[[1]] %>% 
-                  mutate(df = "weekly"),
-                df_15min_monthly_list[[1]] %>% 
-                  mutate(df = "monthly"))
-    # Write to CSV for future use
-    df_all %>% 
-      write_csv(here("data", "cached_model_data", paste0("cache_cq_all_datasets", "_", sol_choice, "_", site_choice, ".csv")))
-  
-  # Read in past results:
-  # df_all <- read_csv(here("data", "cached_model_data", paste0("cache_cq_all_datasets", "_", sol_choice, "_", site_choice, ".csv")))
-  
-    # Faceted plot of CQ data
-    p_cq_all <-
-      df_all %>%
-      mutate(df = factor(df, 
-                         levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                         labels = c("Grab samples", "Sensor: 15-min", "Sensor: Daily", "Sensor: Weekly", "Sensor: Monthly"))) %>% 
-      ggplot(aes(x = q, y = c)) +
-      facet_wrap(~df, ncol = 1) +
-      geom_point(shape = 1, alpha = 0.5) +
-      # scale_y_log10(limits = c(-0.1, 1.5), breaks = c(0.0001, 0.0100, 1.0000)) +
-      scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
-                    labels = scales::trans_format("log10", math_format(10^.x)),
-                    limits = c(10^-5, 10^2)) +    
-      scale_x_log10() +
-      labs(y = expression("NO"[3]~"-N (mg L"^-1~")"),
-           x = expression(Discharge~(L~s^-1)),
-           title = "Raw CQ data") +    
-      theme_bw() +
-      theme(panel.grid = element_blank(),
-            strip.background = element_blank(),
-            strip.text = element_blank(),
-            axis.title = element_text(size = 13),
-            plot.margin = margin(t = 5.5,  # Top margin
-                                 r = 9,  # Right margin
-                                 b = 5.5,  # Bottom margin
-                                 l = 5.5)) # Left margin)
-    
-    # Create a single df for all bdf data
-    df_bdf_all <-
-      bdf_grab %>% 
-      mutate(df = "lt_grab") %>% 
-      bind_rows(bdf_15min %>% 
-                  mutate(df = "15min"),
-                bdf_daily %>% 
-                  mutate(df = "daily"),
-                bdf_weekly %>% 
-                  mutate(df = "weekly"),
-                bdf_monthly %>% 
-                  mutate(df = "monthly"))
-    
-    # Write to CSV for future use
-    df_bdf_all %>% 
-      write_csv(here("data", "cached_model_data",  paste0("cache_cq_all_bdf", "_", sol_choice, "_", site_choice, ".csv")))
-    
-    
-    # Create a single df for plot_df_X data
-    df_fit_all <-
-      plot_df_grab %>% 
-      mutate(df = "lt_grab") %>% 
-      bind_rows(plot_df_15min %>% 
-                  mutate(df = "15min"),
-                plot_df_daily %>% 
-                  mutate(df = "daily"),
-                plot_df_weekly %>% 
-                  mutate(df = "weekly"),
-                plot_df_monthly %>% 
-                  mutate(df = "monthly"))
-    
-    # Write to CSV for future use
-    df_fit_all %>% 
-      write_csv(here("data", "cached_model_data",  paste0("cache_cq_all_fits", "_", sol_choice, "_", site_choice, ".csv")))
-  
-  # Read in past results:
-  # df_bdf_all <- read_csv(here("data", "cached_model_data",  paste0("cache_cq_all_bdf", "_", sol_choice, "_", site_choice, ".csv")))
-  # df_fit_all <- read_csv(here("data", "cached_model_data",  paste0("cache_cq_all_fits", "_", sol_choice, "_", site_choice, ".csv")))
-  
-    # Faceted plot of fits
-    p_fit_all <-
-      df_fit_all %>% 
-      mutate(df = factor(df, 
-                         levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                         labels = c("Grab samples: Weekly", "Sensor: 15-min", "Sensor: Daily",
-                                    "Sensor: Weekly", "Sensor: Monthly"))) %>% 
-      mutate(model = factor(model,
-                            levels = c("eq1", "eq2", "eq3", "eq4", "eq5", "eq6", "eq7", "eq8"),
-                            labels = c("Eq. 1", "Eq. 2", "Eq. 3", "Eq. 4", "Eq. 5", "Eq. 6", "Eq. 7", "Eq. 8"))) %>% 
-      filter(value > 0) %>%
-      ggplot(aes(x = q, y = value)) +
-      geom_point(data = df_bdf_all %>% 
-                   mutate(df = factor(df, 
-                                      levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                                      labels = c("Grab samples: Weekly", "Sensor: 15-min", "Sensor: Daily",
-                                                 "Sensor: Weekly", "Sensor: Monthly"))), 
-                 mapping = aes(bqs, bcs), shape = 1, size = 1.7, color = "gray30") +
-      geom_line(aes(colour = model, linetype =  model), linewidth = 0.8) +
-      facet_wrap(~df, ncol = 1) +
-      scale_colour_scico_d(palette = "batlow", name = "Model") +
-      scale_linetype_discrete(name = "Model") +
-      geom_hline(yintercept = c0_bf, linetype = "dashed", color = "gray25") +
-      geom_hline(yintercept = c0_wd, linetype = "dashed", color = "lightskyblue1") +      
-      scale_y_log10() +
-      # scale_y_log10(limits = c(-0.1, 1.5), breaks = c(0.0001, 0.0100, 1.0000)) +
-      scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
-                    labels = scales::trans_format("log10", math_format(10^.x)),
-                    limits = c(10^-5, 10^2)) +
-      scale_x_log10() +
-      # scale_x_log10(limits = c(0, 0.8), breaks = seq(0, 0.8, by = 0.2)) +
-      labs(x = expression(Discharge~(L~s^-1)),
-           y = expression("NO"[3]~"-N (mg L"^-1~")"),
-           title = "Model fits",
-           subtitle = "Complete Q range") +
-      theme_bw() +
-      theme(panel.grid = element_blank(),
-            strip.background = element_blank(),
-            axis.title.y = element_blank(),
-            strip.text = element_blank(),
-            legend.position = "none",
-            # axis.text.y = element_blank(),
-            plot.margin = margin(t = 5.5,  # Top margin
-                                 r = 7,  # Right margin
-                                 b = 5.5,  # Bottom margin
-                                 l = 5.5)) # Left margin
-    
-    # Try making zoomed in plots of "whiskered ends" for first two datasets
-    # Low end
-    p_low <-
-      df_fit_all %>% 
-      mutate(df = factor(df, 
-                         levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                         labels = c("Grab samples: Weekly", "Sensor: 15-min", "Sensor: Daily",
-                                    "Sensor: Weekly", "Sensor: Monthly"))) %>% 
-      mutate(model = factor(model,
-                            levels = c("eq1", "eq2", "eq3", "eq4", "eq5", "eq6", "eq7", "eq8"),
-                            labels = c("Eq. 1", "Eq. 2", "Eq. 3", "Eq. 4", "Eq. 5", "Eq. 6", "Eq. 7", "Eq. 8"))) %>% 
-      ggplot(aes(x = q, y = value)) +
-      geom_line(aes(colour = model, linetype =  model), size = 0.8) +
-      geom_point(data = df_bdf_all %>% 
-                   mutate(df = factor(df, 
-                                      levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                                      labels = c("Grab samples: Weekly", "Sensor: 15-min", "Sensor: Daily",
-                                                 "Sensor: Weekly", "Sensor: Monthly"))), 
-                 mapping = aes(bqs, bcs), shape = 1, size = 1.7, color = "gray10") +
-      facet_wrap(~df, ncol = 1) +
-      scale_colour_scico_d(palette = "batlow", name = "Model") +
-      scale_linetype_discrete(name = "Model") +
-      # scale_y_log10() +
-      scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
-                    labels = scales::trans_format("log10", math_format(10^.x)),
-                    limits = c(10^-2, 10^2)) +
-      # scale_y_log10(limits = c(175, 250), breaks = c(200, 250)) +
-      # scale_x_log10() +
-      scale_x_log10(limits = c(0.15, 6), breaks = c(0.3, 3)) +
-      # scale_x_log10(limits = c(0.1, 6)) +
-      labs(x = expression(Discharge~(L~s^-1)),
-           y = expression("NO"[3]~"-N (mg L"^-1~")"),
-           subtitle = "Low Q") +
-      theme_bw() +
-      theme(panel.grid = element_blank(),
-            strip.background = element_blank(),
-            axis.title.y = element_blank(),
-            strip.text = element_blank(),
-            legend.position = "none",
-            axis.title.x = element_blank())
-    
-    # High end
-    p_high <-
-      df_fit_all %>% 
-      mutate(df = factor(df, 
-                         levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                         labels = c("Grab samples", "Sensor: 15-min", "Sensor: Daily",
-                                    "Sensor: Weekly", "Sensor: Monthly"))) %>% 
-      mutate(model = factor(model,
-                            levels = c("eq1", "eq2", "eq3", "eq4", "eq5", "eq6", "eq7", "eq8"),
-                            labels = c("Eq. 1", "Eq. 2", "Eq. 3", "Eq. 4", "Eq. 5", "Eq. 6", "Eq. 7", "Eq. 8"))) %>% 
-      ggplot(aes(x = q, y = value)) +
-      geom_line(aes(colour = model, linetype =  model), size = 0.8) +
-      geom_point(data = df_bdf_all %>% 
-                   mutate(df = factor(df, 
-                                      levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                                      labels = c("Grab samples", "Sensor: 15-min", "Sensor: Daily",
-                                                 "Sensor: Weekly", "Sensor: Monthly"))), 
-                 mapping = aes(bqs, bcs), shape = 1, size = 1.7, color = "gray10") +
-      facet_wrap(~df, ncol = 1, strip.position = "right") +
-      scale_colour_scico_d(palette = "batlow", name = "Model") +
-      scale_linetype_discrete(name = "Model") +
-      # scale_y_log10() +
-      # scale_x_log10() +
-      scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
-                    labels = scales::trans_format("log10", math_format(10^.x)),
-                    limits = c(10^-6, 10^1)) +
-      # scale_x_log10(limits = c(25, 150)) +
-      scale_x_log10(limits = c(25, 150), breaks = c(30, 100)) +
-      labs(x = expression(Discharge~(L~s^-1)),
-           y = expression("NO"[3]~"-N (mg L"^-1~")"),
-           subtitle = "High Q") +
-      theme_bw() +
-      theme(panel.grid = element_blank(),
-            strip.background = element_blank(),
-            axis.title.y = element_blank(),
-            strip.text = element_text(size = 12, face = "bold", color = "black"),
-            axis.title.x = element_blank())       
-    
-    
-    # Combine plots with patchwork
-    xlab <- p_cq_all$labels$x
-    p_cq_all$labels$x <- p_fit_all$labels$x <- " "
-    
-    tiff(here("plots", paste0("fig_model_fits", "_", sol_choice, "_", site_choice, ".tiff")), width = 10, height = 8.5, units = "in", res = 600)
-    p_cq_all + p_fit_all + p_low + p_high + 
-      plot_layout(ncol = 4, widths = c(0.7, 1, 0.4, 0.4))
-    grid::grid.draw(grid::textGrob(xlab, y = 0.02, gp = gpar(fontsize = 13)))
-    dev.off()
-  
-  
-  ## Plot cross-validation results ----
-    # Create a single df for out2_X (C-V) data
-    df_cv_all <-
-      out2_grab %>% 
-      mutate(df = "lt_grab") %>% 
-      bind_rows(out2_15min %>% 
-                  mutate(df = "15min"),
-                out2_daily %>% 
-                  mutate(df = "daily"),
-                out2_weekly %>% 
-                  mutate(df = "weekly"),
-                out2_monthly %>% 
-                  mutate(df = "monthly"))
-    
-    # Write to CSV for future use
-    df_cv_all %>% 
-      write_csv(here("data", "cached_model_data",  paste0("cache_cq_all_cv", "_", sol_choice, "_", site_choice, ".csv")))
-    
-    # Read in past results
-    df_cv_all <-
-      read_csv(here("data", "cached_model_data",  paste0("cache_cq_all_cv", "_", sol_choice, "_", site_choice, ".csv")))
-    
-    # Plot all at once
-    # df_cv_all %>%
-    #   ggplot(aes(x = eq, y = rmse_mean, fill = df, color = df)) +
-    #   geom_bar(stat = "identity", position = position_dodge(0.9), width = 0.7) +    
-    #   geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0, position = position_dodge(0.9)) +
-    #   scale_colour_scico_d(palette = "batlow", name = "Model") +
-    #   scale_fill_scico_d(palette = "batlow", name = "Model") +
-    #   ylab("RMSE") +
-    #   xlab("Equation") +
-    #   theme_classic() +
-    #   theme(axis.title.x = element_text(margin = margin(t = 5, r = 0, b = 0, l = 0)))
-    
-    med_c <-
-      df_15min %>% 
-      summarize(med_c = median(c, na.rm = TRUE)) %>% 
-      pull(med_c)    
-    
-    df_cv_all %>%
-      mutate(df = factor(df,
-                         levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                         labels = c("G-\nWeekly", "S-\n15-min", "S-\nDaily",
-                                    "S-\nWeekly", "S-\nMonthly"))) %>%
-      mutate(eq = factor(eq,
-                         levels = c("e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"),
-                         labels = c("Eq. 1", "Eq. 2", "Eq. 3", "Eq. 4", "Eq. 5", "Eq. 6", "Eq. 7", "Eq. 8"))) %>%
-      ggplot(aes(x = df, y = rmse_mean, color = eq)) +
-      geom_point(size = 2, position = position_dodge(0.8)) +
-      geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0, position = position_dodge(0.8)) +
-      geom_hline(yintercept = med_c, linetype = "dashed", color = "gray50") +
-      scico::scale_colour_scico_d(palette = "batlow", name = "Model") +
-      scale_fill_scico_d(palette = "batlow", name = "Model") +
-      ylab("RMSE") +
-      xlab("Data set") +
-      theme_classic() +
-      theme(axis.title.x = element_text(margin = margin(t = 5, r = 0, b = 0, l = 0)))
-    
-    ggsave(here("plots", paste0("fig_model_cv", "_", sol_choice, "_", site_choice, ".tiff")), height = 3, width = 5, units = "in", dpi = 600)
-    
-    
-    # On average, how much greater was the RMSE for eq 6 vs the lowest RMSE for that dataset
-    df_cv_all %>% 
-      select(eq, rmse_mean, df) %>% 
-      pivot_wider(names_from = eq, values_from = rmse_mean) %>% 
-      rowwise() %>% 
-      mutate(min_RMSE = min(e1, e2, e3, e4, e5, e6, e7, e8)) %>% 
-      mutate(per_inc_e6 = (e6 - min_RMSE)/min_RMSE*100)
-    
-    # On average, how much greater were the RMSEs for the the weekly grab samples vs the full sensor dataset?
-    df_cv_all %>% 
-      group_by(df) %>% 
-      summarize(RMSE_mean = mean(rmse_mean)) %>% 
-      pivot_wider(names_from = df, values_from = RMSE_mean) %>% 
-      mutate(per_inc_gr_weekly = (lt_grab - `15min`)/`15min`*100)
-  
-  # Table of CV results ----
-  df_cv_all %>% 
-    mutate(Source = ifelse(df == "lt_grab", "Grab samples", "Sensor")) %>% 
-    mutate(Frequency = ifelse(df == "lt_grab", "Weekly", NA),
-           Frequency = ifelse(is.na(Frequency) & df == "15min", "15 min", Frequency),
-           Frequency = ifelse(is.na(Frequency) & df == "daily", "Daily", Frequency),
-           Frequency = ifelse(is.na(Frequency) & df == "weekly", "Weekly", Frequency),
-           Frequency = ifelse(is.na(Frequency) & df == "monthly", "Monthly", Frequency)) %>% 
-    mutate(Eq. = parse_number(eq)) %>% 
-    select(Source, Frequency, `Eq.`, rmse_mean, ci_lower, ci_upper) %>% 
-    mutate(rmse_mean = format(round(rmse_mean, 2), nsmall = 2),
-           ci_lower = format(round(ci_lower, 2), nsmall = 2),
-           ci_upper = format(round(ci_upper, 2), nsmall = 2)) %>% 
-    rename(RMSE = rmse_mean, `95% CI, lower` = ci_lower, `95% CI, upper` = ci_upper) %>% 
-    write_csv(here("tables", paste0("table_cv_results_summary", "_", sol_choice, "_", site_choice, ".csv")))
-  
-  
-  
-  # Plot residuals ----
-    # Low Flows (0–10th percentile),
-    # Dry Conditions (10–40th percentile), 
-    # Mid-Range Flows (40–60th percentile), 
-    # Moist Conditions (60–90th percentile)
-    # High Flows (90–100th percentile; USEPA 2007).
-    # US EPA (2007) An approach using load duration curves in the development of TMDLs. EPA 841-B-07–006.
-    # Arial suggests the package hydrotsm will calc flow percentiles
-    # Shannon also has code she will share
-    
-    # Create a single df for resids_X data
-    df_resids_all <-
-      resids_grab %>% 
-      mutate(df = "lt_grab") %>% 
-      bind_rows(resids_15min %>% 
-                  mutate(df = "15min"),
-                resids_daily %>% 
-                  mutate(df = "daily"),
-                resids_weekly %>% 
-                  mutate(df = "weekly"),
-                resids_monthly %>% 
-                  mutate(df = "monthly"))
-    # Write to CSV for future use
-    df_resids_all %>% 
-      write_csv(here("data", "cached_model_data",  paste0("cache_cq_all_resids", "_", sol_choice, "_", site_choice, ".csv")))
-    
-    # Read past results
-    # df_resids_all <-
-    #   read_csv(here("data", "cached_model_data",  paste0("cache_cq_all_resids", "_", sol_choice, "_", site_choice, ".csv")))
-      
-    
-    # Plot just the 15-min sensor data: bin by flow percentile
-    # Reminder about flow-duration percentiles: lower % values = higher flows; higher % values = lower flows
-    # A 5-percent exceedance probability represents a high flow that has been exceeded only 5-percent of all 
-    # days of the flow record. Conversely, a 95-percent exceedance probability would characterize low-flow 
-    # conditions in a stream, because 95 percent of all daily mean flows in the record are greater than that amount. 
-    
-    df_resids_all %>% 
-      filter(df == "15min") %>% 
-      group_by(model) %>% 
-      # Rank daily discharges from largest to smallest value fr each site
-      # Largest discharge value has a rank value of 1
-      arrange(model, desc(q)) %>% 
-      mutate(rank = row_number()) %>% 
-      # Total the number of discharge records for each site
-      mutate(n = n()) %>% 
-      # Calculate exceedence probability (P)/flow-duration percentile:
-      mutate(ex_prob = 100 * (rank / (n + 1))) %>% 
-      # Divide into EPA flow percentile zones
-      mutate(fp_zone_epa = ifelse(ex_prob <= 10, "High", NA),
-             fp_zone_epa = ifelse(is.na(fp_zone_epa) & (ex_prob > 10 & ex_prob <= 40), "Moist", fp_zone_epa),
-             fp_zone_epa = ifelse(is.na(fp_zone_epa) & (ex_prob > 40 & ex_prob <= 60), "Mid-range", fp_zone_epa),
-             fp_zone_epa = ifelse(is.na(fp_zone_epa) & (ex_prob > 60 & ex_prob <= 90), "Dry", fp_zone_epa),
-             fp_zone_epa = ifelse(is.na(fp_zone_epa) & ex_prob > 90, "Low", fp_zone_epa)) %>% 
-      mutate(fp_zone_epa = factor(fp_zone_epa, levels = c("High", "Moist", "Mid-range", "Dry", "Low"))) %>% 
-      # Create bins by flow percentile
-      # mutate(ex_prob_bin = cut(ex_prob, breaks = seq(0, 100, by = 10))) %>% 
-      mutate(model = factor(model,
-                            levels = c("eq1", "eq2", "eq3", "eq4", "eq5", "eq6", "eq7", "eq8"),
-                            labels = c("Eq. 1", "Eq. 2", "Eq. 3", "Eq. 4", "Eq. 5", "Eq. 6", "Eq. 7", "Eq. 8"))) %>%
-      ggplot(aes(x = fp_zone_epa, y = resids, color = model)) +
-      facet_wrap(~model, ncol = 2) +
-      geom_boxplot() +
-      scale_colour_scico_d(palette = "batlow", name = "Model") +
-      geom_hline(yintercept = 0, linetype = "dashed") +
-      labs(x = "Flow conditions",
-           y = "Residuals") +
-      theme_bw() +
-      theme(panel.grid = element_blank(),
-            strip.background = element_blank(),
-            legend.position = "none",
-            axis.title.x = element_text(margin = margin(7, 0, 0, 0)),
-            axis.text.x = element_text(size = 7))
-
-    ggsave(here("plots", paste0("fig_model_resids_epa_flow_zones", "_", sol_choice, "_", site_choice, ".tiff")), height = 7, width = 4.5, units = "in", dpi = 300)
-  
-  
-  
-  # CHECK DISTRIBUTIONS OF C AND Q FOR ALL DATASETS USED ----
-  
-  # Read in past results  
-  # df_all <- 
-  #   read_csv(here("data", "cached_model_data", paste0("cache_cq_all_datasets", "_", sol_choice, "_", site_choice, ".csv")))  
-  
-  # Plot c and q separately so that I can keep x-axis ranges same
-  # Calculate medians to plot on histograms
-  meds_cq <-
-    df_all %>% 
-    mutate(df = factor(df,
-                       levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                       labels = c("G-Weekly", "S-15min", "S-Daily", "S-Weekly", "S-Monthly"))) %>%
-    group_by(df) %>% 
-    summarize(med_c = median(c),
-              q1_c = quantile(c, 1/4),
-              q3_c = quantile(c, 3/4),
-              med_q = median(q),
-              q1_q = quantile(q, 1/4),
-              q3_q = quantile(q, 3/4))
-  
-  # Conc
-  p_c_dist <-
-    df_all %>% 
-    mutate(df = factor(df,
-                       levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                       labels = c("G-Weekly", "S-15min", "S-Daily", "S-Weekly", "S-Monthly"))) %>% 
-    ggplot(aes(x = c)) +
-    facet_wrap(~df, ncol = 1, scales = "free_y") +
-    geom_histogram() +
-    geom_vline(data = meds_cq, aes(xintercept = med_c)) +
-    geom_vline(data = meds_cq, aes(xintercept = q1_c), linetype = "dashed") +
-    geom_vline(data = meds_cq, aes(xintercept = q3_c), linetype = "dashed") +
-    labs(x = expression("NO"[3]~"-N (mg L"^-1~")"),
-         y = "Count") +
-    theme_classic() +
-    theme(panel.grid = element_blank(),
-          strip.background = element_blank())
-  
-  # Discharge
-  p_q_dist <-
-    df_all %>% 
-    mutate(df = factor(df,
-                       levels = c("lt_grab", "15min", "daily", "weekly", "monthly"),
-                       labels = c("G-Weekly", "S-15min", "S-Daily", "S-Weekly", "S-Monthly"))) %>% 
-    ggplot(aes(x = q)) +
-    facet_wrap(~df, ncol = 1, scales = "free_y") +
-    geom_vline(data = meds_cq, aes(xintercept = med_q)) +
-    geom_vline(data = meds_cq, aes(xintercept = q1_q), linetype = "dashed") +
-    geom_vline(data = meds_cq, aes(xintercept = q3_q), linetype = "dashed") +      
-    geom_histogram() +
-    labs(x = expression(Discharge~(L~s^-1)),
-         y = "Count") +
-    theme_classic() +
-    theme(panel.grid = element_blank(),
-          strip.background = element_blank(),
-          axis.title.y = element_blank())
-  
-  # Combine plots
-  p_c_dist + p_q_dist + plot_annotation(tag_levels = "a", tag_suffix = ")")
-  
-  ggsave(here("plots", paste0("fig_compare_cq_histograms", "_", sol_choice, "_", site_choice, ".tiff")), width = 7.5, height = 6, units = "in", dpi = 600)    
-  
