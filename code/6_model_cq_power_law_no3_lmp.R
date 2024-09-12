@@ -1,5 +1,7 @@
 # Fit the CQ data to Hall's models & do cross-validation
 
+# eq7_nFit, eq2_nFit, & eq5_nFit are currently commented out and need to be fixed! 9/5/2024
+
 # Load libraries ----
   library("tidyverse")    # general workhorse
   library("here")         # takes the guesswork out of dealing with file paths
@@ -10,7 +12,7 @@
   library("minpack.lm")   # alternative to 'nls'; much more flexible!
   
 # Which site and solute would you like to model?
-  site_choice <- "BDC"
+  site_choice <- "LMP"
   sol_choice <- "no3"
   grab_choice <- "no3_grab"
 
@@ -260,7 +262,7 @@
                    n_source = "fit",
                    param_n = eq2_nFit_fit$m$getPars()[[2]],
                    df = df_list[[i]]$df)  
-          print(sprintf("RMSE Eq 2-1: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
+          print(sprintf("RMSE Eq 2-2: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
         
         # Equation 3/Model 3a: Same as models 1 or 2 except one assumes concentration changes little as compared to volume
         eq3 <- function(q, f,e) (f-e*log(q))
@@ -290,7 +292,7 @@
           print(sprintf("RMSE Eq 4-1: %s", RMSE(summary(eq4_fit)$residuals)))
           
           # Don't force n
-          eq4_nFit_fit <- nlsLM(c ~ eq4(q, h, g, n), data=df_list[[i]], start=list(h=175, g=0.00001, n=0.1))
+          eq4_nFit_fit <- nlsLM(c ~ eq4(q, h, g, n), data=df_list[[i]], start=list(h=175, g=0.00001, n=0.5))
           eq4_nFit_resids <- 
             tibble(resids = as.numeric(residuals(eq4_nFit_fit)),
                    q = df_list[[i]]$q,
@@ -346,7 +348,7 @@
           print(sprintf("RMSE Eq 6-1: %s", RMSE(summary(eq6_fit)$residuals)))
           
           # Don't force n
-          eq6_nFit_fit <- nlsLM(c ~ eq6(q, m, j, n), data=df_list[[i]], start=list(m=100, j=100, n = 0.1))
+          eq6_nFit_fit <- nlsLM(c ~ eq6(q, m, j, n), data=df_list[[i]], start=list(m=100, j=100, n = 0.5))
           eq6_nFit_resids <- 
             tibble(resids = as.numeric(residuals(eq6_nFit_fit)),
                    q = df_list[[i]]$q,
@@ -374,17 +376,17 @@
           print(sprintf("RMSE Eq 7-1: %s", RMSE(summary(eq7_fit)$residuals)))
           
           # Don't force n
-          eq7_nFit_fit <- nlsLM(c ~ eq7(q, s, b, n), data=df_list[[i]],start=list(s=175, b=0.00001, n = 0.1))
-          eq7_nFit_resids <- 
-            tibble(resids = as.numeric(residuals(eq7_nFit_fit)),
-                   q = df_list[[i]]$q,
-                   model = "eq7_nFit",
-                   param_s = eq7_nFit_fit$m$getPars()[[1]],
-                   param_b = eq7_nFit_fit$m$getPars()[[2]],
-                   n_source = "fit",
-                   param_n = eq7_nFit_fit$m$getPars()[[3]],
-                   df = df_list[[i]]$df) 
-          print(sprintf("RMSE Eq 7-2: %s", RMSE(summary(eq7_nFit_fit)$residuals)))          
+          # eq7_nFit_fit <- nlsLM(c ~ eq7(q, s, b, n), data=df_list[[i]],start=list(s=175, b=0.00001, n = 0.1))
+          # eq7_nFit_resids <- 
+          #   tibble(resids = as.numeric(residuals(eq7_nFit_fit)),
+          #          q = df_list[[i]]$q,
+          #          model = "eq7_nFit",
+          #          param_s = eq7_nFit_fit$m$getPars()[[1]],
+          #          param_b = eq7_nFit_fit$m$getPars()[[2]],
+          #          n_source = "fit",
+          #          param_n = eq7_nFit_fit$m$getPars()[[3]],
+          #          df = df_list[[i]]$df) 
+          # print(sprintf("RMSE Eq 7-2: %s", RMSE(summary(eq7_nFit_fit)$residuals)))          
         
         # Equation 8/Model 5: single mixing volume, inflow = outflow, some part of mixing volume remains constant (V0). Inflow has constant concentration (C0)
           # Force n
@@ -430,7 +432,7 @@
                       eq6_resids,
                       eq6_nFit_resids,
                       eq7_resids,
-                      eq7_nFit_resids,
+                      # eq7_nFit_resids,
                       eq8_resids,
                       eq8_nFit_resids) %>% 
             mutate(c0_source = "baseflow",
@@ -458,9 +460,13 @@
             plotdf = data.frame(df_list[[i]]$q, predict(eq0_fit), predict(eq1_fit), predict(eq1_nFit_fit),
                                 predict(eq2_fit), predict(eq2_nFit_fit), predict(eq3_fit), predict(eq4_fit), 
                                 predict(eq4_nFit_fit), predict(eq5_fit), predict(eq5_nFit_fit), predict(eq6_fit),
-                                predict(eq6_nFit_fit), predict(eq7_fit), predict(eq7_nFit_fit), predict(eq8_fit), predict(eq8_nFit_fit))
+                                predict(eq6_nFit_fit), predict(eq7_fit), 
+                                # predict(eq7_nFit_fit), 
+                                predict(eq8_fit), predict(eq8_nFit_fit))
             colnames(plotdf) = c('q','eq0','eq1','eq1_nFit','eq2','eq2_nFit','eq3','eq4','eq4_nFit',
-                                 'eq5','eq5_nFit','eq6','eq6_nFit','eq7','eq7_nFit','eq8','eq8_nFit')
+                                 'eq5','eq5_nFit','eq6','eq6_nFit','eq7',
+                                 # 'eq7_nFit',
+                                 'eq8','eq8_nFit')
             
             plotdf <- melt(plotdf,  id.vars = 'q', variable.name = 'model') %>% 
               mutate(df = as.character(df_list[[i]][1, "df"]))
@@ -486,10 +492,12 @@
     # Remove objects
     rm(eq0_fit, eq1_fit, eq1_nFit_fit, eq2_fit, eq2_nFit_fit, eq3_fit, eq4_fit,
        eq4_nFit_fit, eq5_fit, eq5_nFit_fit, eq6_fit, eq6_nFit_fit, eq7_fit,
-       eq7_nFit_fit, eq8_fit, eq8_nFit_fit,
+       # eq7_nFit_fit, 
+       eq8_fit, eq8_nFit_fit,
        eq0_resids, eq1_resids, eq1_nFit_resids, eq2_resids, eq2_nFit_resids, eq3_resids, eq4_resids,
        eq4_nFit_resids, eq5_resids, eq5_nFit_resids, eq6_resids, eq6_nFit_resids, eq7_resids,
-       eq7_nFit_resids, eq8_resids, eq8_nFit_resids)    
+       # eq7_nFit_resids, 
+       eq8_resids, eq8_nFit_resids)    
   
     
     ### REPEAT where c0 = c0_wd ----
@@ -520,16 +528,16 @@
       print(sprintf("RMSE Eq 2-1: %s", RMSE(summary(eq2_fit)$residuals)))
       
       # Don't force n
-      eq2_nFit_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=df_list[[i]], start=list(a=380, n=1))
-      eq2_nFit_resids <- 
-        tibble(resids = as.numeric(residuals(eq2_nFit_fit)),
-               q = df_list[[i]]$q,
-               model = "eq2_nFit",
-               param_a = eq2_nFit_fit$m$getPars()[[1]],
-               n_source = "fit",
-               param_n = eq2_nFit_fit$m$getPars()[[2]],
-               df = df_list[[i]]$df)  
-      print(sprintf("RMSE Eq 2-1: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
+      # eq2_nFit_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=df_list[[i]], start=list(a=-15, n=1))
+      # eq2_nFit_resids <- 
+      #   tibble(resids = as.numeric(residuals(eq2_nFit_fit)),
+      #          q = df_list[[i]]$q,
+      #          model = "eq2_nFit",
+      #          param_a = eq2_nFit_fit$m$getPars()[[1]],
+      #          n_source = "fit",
+      #          param_n = eq2_nFit_fit$m$getPars()[[2]],
+      #          df = df_list[[i]]$df)  
+      # print(sprintf("RMSE Eq 2-1: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
       
       # Equations 5, 5a/Model 3c: Same as model 2 except one assumes volume changes little as compared to concentration
       # Force n
@@ -547,17 +555,17 @@
       print(sprintf("RMSE Eq 5-1: %s", RMSE(summary(eq5_fit)$residuals)))
       
       # Don't force n
-      eq5_nFit_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=df_list[[i]], start=list(h=160, g=0.00001, n=1))
-      eq5_nFit_resids <- 
-        tibble(resids = as.numeric(residuals(eq5_nFit_fit)),
-               q = df_list[[i]]$q,
-               model = "eq5_nFit",
-               param_h = eq5_nFit_fit$m$getPars()[[1]],
-               param_g = eq5_nFit_fit$m$getPars()[[2]],
-               n_source = "fit",
-               param_n = eq5_nFit_fit$m$getPars()[[3]],
-               df = df_list[[i]]$df)   
-      print(sprintf("RMSE Eq 5-2: %s", RMSE(summary(eq5_nFit_fit)$residuals)))          
+      # eq5_nFit_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=df_list[[i]], start=list(h=160, g=0.00001, n=1))
+      # eq5_nFit_resids <- 
+      #   tibble(resids = as.numeric(residuals(eq5_nFit_fit)),
+      #          q = df_list[[i]]$q,
+      #          model = "eq5_nFit",
+      #          param_h = eq5_nFit_fit$m$getPars()[[1]],
+      #          param_g = eq5_nFit_fit$m$getPars()[[2]],
+      #          n_source = "fit",
+      #          param_n = eq5_nFit_fit$m$getPars()[[3]],
+      #          df = df_list[[i]]$df)   
+      # print(sprintf("RMSE Eq 5-2: %s", RMSE(summary(eq5_nFit_fit)$residuals)))          
       
       # Equation 8/Model 5: single mixing volume, inflow = outflow, some part of mixing volume remains constant (V0). Inflow has constant concentration (C0)
       # Force n
@@ -591,9 +599,9 @@
       resids_final_2 <- 
         bind_rows(resids_final_2,
                   eq2_resids,
-                  eq2_nFit_resids,
+                  # eq2_nFit_resids,
                   eq5_resids,
-                  eq5_nFit_resids,
+                  # eq5_nFit_resids,
                   eq8_resids,
                   eq8_nFit_resids) %>% 
         mutate(c0_source = "wet_deposition",
@@ -618,10 +626,16 @@
       bdf <- data.frame(bqs,bcs,sigmas) %>% 
         mutate(df = as.character(df_list[[i]][1, "df"]))
       plotdf = data.frame(df_list[[i]]$q, 
-                          predict(eq2_fit), predict(eq2_nFit_fit), 
-                          predict(eq5_fit), predict(eq5_nFit_fit), 
+                          predict(eq2_fit), 
+                          # predict(eq2_nFit_fit), 
+                          predict(eq5_fit), 
+                          # predict(eq5_nFit_fit), 
                           predict(eq8_fit), predict(eq8_nFit_fit))
-      colnames(plotdf) = c('q','eq2','eq2_nFit','eq5','eq5_nFit','eq8','eq8_nFit')
+      colnames(plotdf) = c('q','eq2',
+                           # 'eq2_nFit',
+                           'eq5',
+                           # 'eq5_nFit',
+                           'eq8','eq8_nFit')
       
       plotdf <- melt(plotdf,  id.vars = 'q', variable.name = 'model') %>% 
         mutate(df = as.character(df_list[[i]][1, "df"]))
@@ -644,7 +658,11 @@
       write_csv(here("data", "out",  paste0("cq_all_fits", "_", "wetdep", "_", sol_choice, "_", site_choice, ".csv")))    
     
     # Remove objects
-    rm(eq2_fit, eq2_nFit_fit, eq5_fit, eq5_nFit_fit, eq8_fit, eq8_nFit_fit,
+    rm(eq2_fit, 
+       # eq2_nFit_fit, 
+       eq5_fit, 
+       # eq5_nFit_fit, 
+       eq8_fit, eq8_nFit_fit,
        eq2_resids, eq2_nFit_resids, eq5_resids, eq5_nFit_resids, eq8_resids, eq8_nFit_resids)      
   
   
@@ -655,19 +673,18 @@
       ### fit models with the analysis partition
       eq0_fit <- lm(log10(c) ~ log10(q), data=rsample::analysis(split))
       eq1_fit <- nlsLM(c ~ eq1(q, a, n=rec_n), data=rsample::analysis(split), start=list(a=380))
-      # eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=0.1))
       eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=1))
       eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
       eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
       eq3_fit <- nlsLM(c ~ eq3(q, f, e), data=rsample::analysis(split), start=list(f=100, e=100))
       eq4_fit <- nlsLM(c ~ eq4(q, h, g, n=rec_n), data=rsample::analysis(split), start=list(h=175, g=0.00001))
-      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.1))
+      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.5))
       eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
       eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
       eq6_fit <- nlsLM(c ~ eq6(q, m, j, n=rec_n), data=rsample::analysis(split), start=list(m=100, j=100))
-      eq6_n_fit <- nlsLM(c ~ eq6(q, m, j, n), data=rsample::analysis(split), start=list(m=100, j=100, n = 0.1))
+      eq6_n_fit <- nlsLM(c ~ eq6(q, m, j, n), data=rsample::analysis(split), start=list(m=100, j=100, n = 0.5))
       eq7_fit <- nlsLM(c ~ eq7(q, s, b, n=rec_n), data=rsample::analysis(split), start=list(s=175, b=0.00001))
-      eq7_n_fit <- nlsLM(c ~ eq7(q, s, b, n), data=rsample::analysis(split), start=list(s=175, b=0.00001, n = 0.1))
+      # eq7_n_fit <- nlsLM(c ~ eq7(q, s, b, n), data=rsample::analysis(split), start=list(s=175, b=0.00001, n = 0.1))
       eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001))
       eq8_n_fit <- nlsLM(c ~ eq8(q, s, b, n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001, n=1))
       ### take the dependent variable from the assessment partition
@@ -686,7 +703,7 @@
       e6 <- (y - predict(eq6_fit, newdata=rsample::assessment(split)))
       e6_nFit <- (y - predict(eq6_n_fit, newdata=rsample::assessment(split)))
       e7 <- (y - predict(eq7_fit, newdata=rsample::assessment(split)))
-      e7_nFit <- (y - predict(eq7_n_fit, newdata=rsample::assessment(split)))
+      # e7_nFit <- (y - predict(eq7_n_fit, newdata=rsample::assessment(split)))
       e8 <- (y - predict(eq8_fit, newdata=rsample::assessment(split)))
       e8_nFit <- (y - predict(eq8_n_fit, newdata=rsample::assessment(split)))
       ## return the cross-validated residuals from both models as 
@@ -705,7 +722,7 @@
         e6 = e6,
         e6_nFit = e6_nFit,
         e7 = e7,
-        e7_nFit = e7_nFit,
+        # e7_nFit = e7_nFit,
         e8 = e8,
         e8_nFit = e8_nFit
       )
@@ -718,27 +735,27 @@
     cv_mods_c0 <- function(split, ...){
       ### fit models with the analysis partition
       eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
-      eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
+      # eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
       eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
-      eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
+      # eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
       eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split),start=list(s=175, b=0.00001))
       eq8_n_fit <- nlsLM(c ~ eq8(q, s, b, n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001, n=1))
       ### take the dependent variable from the assessment partition
       y <- rsample::assessment(split)$c
       ### create the residuals  getting model predictions from the assessment partition
       e2 <- (y - predict(eq2_fit, newdata=rsample::assessment(split)))
-      e2_nFit <- (y - predict(eq2_n_fit, newdata=rsample::assessment(split)))
+      # e2_nFit <- (y - predict(eq2_n_fit, newdata=rsample::assessment(split)))
       e5 <- (y - predict(eq5_fit, newdata=rsample::assessment(split)))
-      e5_nFit <- (y - predict(eq5_n_fit, newdata=rsample::assessment(split)))
+      # e5_nFit <- (y - predict(eq5_n_fit, newdata=rsample::assessment(split)))
       e8 <- (y - predict(eq8_fit, newdata=rsample::assessment(split)))
       e8_nFit <- (y - predict(eq8_n_fit, newdata=rsample::assessment(split)))
       ## return the cross-validated residuals from both models as 
       ## a data frame. 
       data.frame(
         e2 = e2,
-        e2_nFit = e2_nFit,
+        # e2_nFit = e2_nFit,
         e5 = e5,
-        e5_nFit = e5_nFit,
+        # e5_nFit = e5_nFit,
         e8 = e8,
         e8_nFit = e8_nFit
       )
@@ -895,7 +912,7 @@
           
           # Set sample sizes of analysis and assessment splits; 
           # We will make the minimum sample size for analysis = 20
-          initial_n = initial(nrow(df_list_cv1[[i]])/2)
+          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
           if(initial_n < 20){
             intial_n = 20
           }

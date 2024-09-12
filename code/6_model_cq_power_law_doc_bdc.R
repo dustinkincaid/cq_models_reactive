@@ -11,8 +11,8 @@
   
 # Which site and solute would you like to model?
   site_choice <- "BDC"
-  sol_choice <- "no3"
-  grab_choice <- "no3_grab"
+  sol_choice <- "doc"
+  grab_choice <- "doc_grab"
 
 # Options ----
   set.seed(1217)
@@ -895,7 +895,7 @@
           
           # Set sample sizes of analysis and assessment splits; 
           # We will make the minimum sample size for analysis = 20
-          initial_n = initial(nrow(df_list_cv1[[i]])/2)
+          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
           if(initial_n < 20){
             intial_n = 20
           }

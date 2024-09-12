@@ -1,21 +1,24 @@
-# Fit the CQ data to Hall's models & do cross-validation
+# Fit the CQ data to Hall's models
 
 # Load libraries ----
   library("tidyverse")    # general workhorse
   library("here")         # takes the guesswork out of dealing with file paths
   library("data.table")   # read in large datasets faster
   library("reshape2")     # manipulate dataframes
+  library("patchwork")    # makes laying out plots much easier
+  library("grid")         # more plotting assistance
   library("rsample")      # for model cross-validation
   library("doParallel")   # for faster computing
+  library("scico")        # color palette for ggplot2
   library("minpack.lm")   # alternative to 'nls'; much more flexible!
   
+
 # Which site and solute would you like to model?
   site_choice <- "BDC"
   sol_choice <- "no3"
   grab_choice <- "no3_grab"
 
 # Options ----
-  set.seed(1217)
   options(scipen = 999) #disable printing of numbers in scientific notation
   
 # Functions for model fitting and plotting ----
@@ -112,11 +115,11 @@
   rm(df_sub)
   
 # Reduce sensor data to the various sampling times (ie, daily, weekly, monthly) ----
-  # Here we create 20 versions of each sampling frequency (e.g., df_15min_daily_1 through df_15min_daily_10)  
+  # Here we create 10 versions of each sampling frequency (e.g., df_15min_daily_1 through df_15min_daily_10)  
   
   # Daily (sample always occurs sometime between 8am and 5pm)
   df_15min_daily_list <- list()
-  for(i in 1:30){
+  for(i in 1:10){
     df_15min_daily_list[[i]] <-
       df_15min %>% 
       mutate(period = ifelse(lubridate::hour(datetime) %in% c(8:16), "sampling", "not_sampling")) %>% 
@@ -130,7 +133,7 @@
 
   # Weekly (sample always occurs M-F sometime between 8am and 5pm)
   df_15min_weekly_list <- list()
-  for(i in 1:30){
+  for(i in 1:10){
     df_15min_weekly_list[[i]] <-
       df_15min %>% 
       mutate(period = ifelse(lubridate::hour(datetime) %in% c(8:16), "sampling", "not_sampling")) %>% 
@@ -147,7 +150,7 @@
 
   # Monthly (sample always occurs M-F sometime between 8am and 5pm)
   df_15min_monthly_list <- list()
-  for(i in 1:30){
+  for(i in 1:10){
     df_15min_monthly_list[[i]] <-
       df_15min %>% 
       mutate(period = ifelse(lubridate::hour(datetime) %in% c(8:16), "sampling", "not_sampling")) %>% 
@@ -203,12 +206,8 @@
           tibble(resids = as.numeric(residuals(eq0_fit)),
                  q = df_list[[i]]$q,
                  model = "eq0",
-                 param_b = eq0_fit$coefficients[[2]],
                  df = df_list[[i]]$df)
-        # Here I recalculate the residual using back-transformed predicted values 
-        resids_eq0 <- df_list[[i]]$c - 10^(predict(eq0_fit))
-        print(sprintf("RMSE Eq 0: %s", RMSE(resids_eq0)))
-        # print(sprintf("RMSE Eq 0: %s", RMSE(summary(eq0_fit)$residuals)))    
+        print(sprintf("RMSE Eq 0: %s", RMSE(summary(eq0_fit)$residuals)))    
         
         # Equation 1/Model 1: Single mixing volume, constant load, inflow has zero concentration
           # Force n
@@ -648,195 +647,92 @@
        eq2_resids, eq2_nFit_resids, eq5_resids, eq5_nFit_resids, eq8_resids, eq8_nFit_resids)      
   
   
-# Evaluate model performance using repeated K/V-fold cross-validation ----    
-  ## Create function to fit and assess models ----
-    ### All models ----
-    cv_mods <- function(split, ...){
-      ### fit models with the analysis partition
-      eq0_fit <- lm(log10(c) ~ log10(q), data=rsample::analysis(split))
-      eq1_fit <- nlsLM(c ~ eq1(q, a, n=rec_n), data=rsample::analysis(split), start=list(a=380))
-      # eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=0.1))
-      eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=1))
-      eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
-      eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
-      eq3_fit <- nlsLM(c ~ eq3(q, f, e), data=rsample::analysis(split), start=list(f=100, e=100))
-      eq4_fit <- nlsLM(c ~ eq4(q, h, g, n=rec_n), data=rsample::analysis(split), start=list(h=175, g=0.00001))
-      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.1))
-      eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
-      eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
-      eq6_fit <- nlsLM(c ~ eq6(q, m, j, n=rec_n), data=rsample::analysis(split), start=list(m=100, j=100))
-      eq6_n_fit <- nlsLM(c ~ eq6(q, m, j, n), data=rsample::analysis(split), start=list(m=100, j=100, n = 0.1))
-      eq7_fit <- nlsLM(c ~ eq7(q, s, b, n=rec_n), data=rsample::analysis(split), start=list(s=175, b=0.00001))
-      eq7_n_fit <- nlsLM(c ~ eq7(q, s, b, n), data=rsample::analysis(split), start=list(s=175, b=0.00001, n = 0.1))
-      eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001))
-      eq8_n_fit <- nlsLM(c ~ eq8(q, s, b, n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001, n=1))
-      ### take the dependent variable from the assessment partition
-      y <- rsample::assessment(split)$c
-      ### create the residuals  getting model predictions from the assessment partition
-      e0 <- (y - 10^(predict(eq0_fit, newdata=rsample::assessment(split))))
-      e1 <- (y - predict(eq1_fit, newdata=rsample::assessment(split)))
-      e1_nFit <- (y - predict(eq1_n_fit, newdata=rsample::assessment(split)))
-      e2 <- (y - predict(eq2_fit, newdata=rsample::assessment(split)))
-      e2_nFit <- (y - predict(eq2_n_fit, newdata=rsample::assessment(split)))
-      e3 <- (y - predict(eq3_fit, newdata=rsample::assessment(split)))
-      e4 <- (y - predict(eq4_fit, newdata=rsample::assessment(split)))
-      e4_nFit <- (y - predict(eq4_n_fit, newdata=rsample::assessment(split)))
-      e5 <- (y - predict(eq5_fit, newdata=rsample::assessment(split)))
-      e5_nFit <- (y - predict(eq5_n_fit, newdata=rsample::assessment(split)))
-      e6 <- (y - predict(eq6_fit, newdata=rsample::assessment(split)))
-      e6_nFit <- (y - predict(eq6_n_fit, newdata=rsample::assessment(split)))
-      e7 <- (y - predict(eq7_fit, newdata=rsample::assessment(split)))
-      e7_nFit <- (y - predict(eq7_n_fit, newdata=rsample::assessment(split)))
-      e8 <- (y - predict(eq8_fit, newdata=rsample::assessment(split)))
-      e8_nFit <- (y - predict(eq8_n_fit, newdata=rsample::assessment(split)))
-      ## return the cross-validated residuals from both models as 
-      ## a data frame. 
-      data.frame(
-        e0 = e0,
-        e1 = e1,
-        e1_nFit = e1_nFit,
-        e2 = e2,
-        e2_nFit = e2_nFit,
-        e3 = e3,
-        e4 = e4,
-        e4_nFit = e4_nFit,
-        e5 = e5,
-        e5_nFit = e5_nFit,
-        e6 = e6,
-        e6_nFit = e6_nFit,
-        e7 = e7,
-        e7_nFit = e7_nFit,
-        e8 = e8,
-        e8_nFit = e8_nFit
-      )
-    }
-    
-    ### Define possibly model
-    possibly_cv_mods = possibly(.f = cv_mods, otherwise = NULL)
-    
-    ### Just models w/ c0 value ----
-    cv_mods_c0 <- function(split, ...){
-      ### fit models with the analysis partition
-      eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
-      eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
-      eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
-      eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
-      eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split),start=list(s=175, b=0.00001))
-      eq8_n_fit <- nlsLM(c ~ eq8(q, s, b, n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001, n=1))
-      ### take the dependent variable from the assessment partition
-      y <- rsample::assessment(split)$c
-      ### create the residuals  getting model predictions from the assessment partition
-      e2 <- (y - predict(eq2_fit, newdata=rsample::assessment(split)))
-      e2_nFit <- (y - predict(eq2_n_fit, newdata=rsample::assessment(split)))
-      e5 <- (y - predict(eq5_fit, newdata=rsample::assessment(split)))
-      e5_nFit <- (y - predict(eq5_n_fit, newdata=rsample::assessment(split)))
-      e8 <- (y - predict(eq8_fit, newdata=rsample::assessment(split)))
-      e8_nFit <- (y - predict(eq8_n_fit, newdata=rsample::assessment(split)))
-      ## return the cross-validated residuals from both models as 
-      ## a data frame. 
-      data.frame(
-        e2 = e2,
-        e2_nFit = e2_nFit,
-        e5 = e5,
-        e5_nFit = e5_nFit,
-        e8 = e8,
-        e8_nFit = e8_nFit
-      )
-    }
-    
-    ### Define possibly model
-    possibly_cv_mods_c0 = possibly(.f = cv_mods_c0, otherwise = NULL)
+  ## Evaluate model performance using repeated K/V-fold cross-validation ----    
+    ### Create function to fit and assess models
+      # All models
+      cv_mods <- function(split, ...){
+        ### fit models with the analysis partition
+        eq1_fit <- nlsLM(c ~ eq1(q, a, n=rec_n), data=rsample::analysis(split), start=list(a=380))
+        eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
+        eq3_fit <- nlsLM(c ~ eq3(q, f, e), data=rsample::analysis(split), start=list(f=100, e=100))
+        eq4_fit <- nlsLM(c ~ eq4(q, h, g, n=rec_n), data=rsample::analysis(split), start=list(h=175, g=0.00001))
+        eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
+        eq6_fit <- nlsLM(c ~ eq6(q, m, j, n=rec_n), data=rsample::analysis(split), start=list(m=100, j=100))
+        eq7_fit <- nlsLM(c ~ eq7(q, s, b, n=rec_n), data=rsample::analysis(split),start=list(s=175, b=0.00001))
+        eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split),start=list(s=175, b=0.00001))
+        ### take the dependent variable from the assessment partition
+        y <- rsample::assessment(split)$c
+        ### create the residuals  getting model predictions from the assessment partition
+        e1 <- (y - predict(eq1_fit, newdata=rsample::assessment(split)))
+        e2 <- (y - predict(eq2_fit, newdata=rsample::assessment(split)))
+        e3 <- (y - predict(eq3_fit, newdata=rsample::assessment(split)))
+        e4 <- (y - predict(eq4_fit, newdata=rsample::assessment(split)))
+        e5 <- (y - predict(eq5_fit, newdata=rsample::assessment(split)))
+        e6 <- (y - predict(eq6_fit, newdata=rsample::assessment(split)))
+        e7 <- (y - predict(eq7_fit, newdata=rsample::assessment(split)))
+        e8 <- (y - predict(eq8_fit, newdata=rsample::assessment(split)))
+        ## return the cross-validated residuals from both models as 
+        ## a data frame. 
+        data.frame(
+          e1 = e1,
+          e2 = e2,
+          e3 = e3,
+          e4 = e4,
+          e5 = e5,
+          e6 = e6,
+          e7 = e7,
+          e8 = e8
+        )
+      }
+      
+      # Just models w/ c0 value
+      cv_mods_c0 <- function(split, ...){
+        ### fit models with the analysis partition
+        eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
+        eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
+        eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split),start=list(s=175, b=0.00001))
+        ### take the dependent variable from the assessment partition
+        y <- rsample::assessment(split)$c
+        ### create the residuals  getting model predictions from the assessment partition
+        e2 <- (y - predict(eq2_fit, newdata=rsample::assessment(split)))
+        e5 <- (y - predict(eq5_fit, newdata=rsample::assessment(split)))
+        e8 <- (y - predict(eq8_fit, newdata=rsample::assessment(split)))
+        ## return the cross-validated residuals from both models as 
+        ## a data frame. 
+        data.frame(
+          e2 = e2,
+          e5 = e5,
+          e8 = e8
+        )
+      }    
   
-  ## Create list of datasets/dataset lists ----
-  df_list_cv1 <- list(df_grab %>% mutate(df = "lt_grab"),
-                      df_15min %>% mutate(df = "15min"))
-  
-  df_list_cv2 <- list(df_15min_daily_list,
-                      df_15min_weekly_list,
-                      df_15min_monthly_list)
- 
-  ## Do cross-validation ----   
-    # This method assumes that the time series data are sorted by timestamp ahead of time
-    # Helpful websites:
-      # https://www.tidymodels.org/learn/models/time-series/
-      # https://rsample.tidymodels.org/reference/rolling_origin.html
-      # https://www.tmwr.org/resampling#rolling
-      # https://openforecast.org/adam/rollingOrigin.html
+    ### The vfold_cv function sets up the cross-validation partitions
+
+    ### Create list of datasets/dataset lists
+    df_list_cv1 <- list(df_grab %>% mutate(df = "lt_grab"),
+                        df_15min %>% mutate(df = "15min"))
     
-    ### DF_GRAB AND DF_15MIN ----
+    df_list_cv2 <- list(df_15min_daily_list,
+                        df_15min_weekly_list,
+                        df_15min_monthly_list)
+                    
+  
     # USE THIS FOR df_grab AND df_15min (i.e., the dfs where we use all the data and don't do 10 versions of each)
-    
-      #### First time with one c0 value ----
+      # First time with one c0 value
       # Set c0
       c0_set <- c0_bf
-      
       
       out1_c0_1 <- tibble()
       for(i in 1:length(df_list_cv1)) {
         
         # Run cross-validation  
         doParallel::registerDoParallel()
-        
-        # Split smaller grab sample df slightly differently than 15-min data set
-        if(df_list_cv1[[i]]$df[[1]] == "lt_grab"){
-          
-          # Set sample sizes of analysis and assessment splits; 
-          # We will make the minimum sample size for analysis = 20
-          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
-          if(initial_n < 20){
-            intial_n = 20
-          }
-          assess_n = ceiling(initial_n/3)
-          skip_n = 1
-          
-          # Create splits
-          splits <- rsample::rolling_origin(df_list_cv1[[i]],
-                                            initial = initial_n,
-                                            assess = assess_n,
-                                            skip = skip_n)
-          
-          # Pull min and max for each split for NRMSE later
-          maxmin_c <-
-            splits %>% 
-            mutate(assessments = map(splits, assessment)) %>%
-            unnest(assessments) %>%
-            summarise(min_c = min(c), 
-                      max_c = max(c), 
-                      .by = id)
-        
-        # Split larger 15-min dataset   
-        } else {
-          
-          # 1 day = 24 * 60 / 15 = 96 rows
-          # 14 days = 96 * 14 = 1344
-          # 30 days = 96 * 30 = 2880
-          # 3 months-ish or 300 days = 2880 * 3
-          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
-          assess_n = ceiling(initial_n/3)
-          skip_n = 2880
-          
-          splits <- rsample::rolling_origin(df_list_cv1[[i]],
-                                            initial = initial_n,
-                                            assess = assess_n,
-                                            skip = skip_n)
-          
-          # Pull min and max for each split for NRMSE later
-          maxmin_c <-
-            splits %>% 
-            mutate(assessments = map(splits, assessment)) %>%
-            unnest(assessments) %>%
-            summarise(min_c = min(c), 
-                      max_c = max(c), 
-                      .by = id)
-        }
-        
-        # Estimate the cv on all splits
-        out <-
-          splits %>% 
+        out <- vfold_cv(df_list_cv1[[i]],
+                        v = 10,
+                        repeats = 10) %>% 
+          ## estimate the cv on all of the partitions
           mutate(err = map(splits,
-                           possibly_cv_mods)) %>% 
-          # Remove models with errors (typically singular gradient errors)
-          compact() %>% 
+                           cv_mods)) %>% 
           ## drop the splits column (THIS WAS NECESSARY FOR THE LARGER DATASETS; OTHERWISE CODE GOT STUCK HERE)
           select(-splits)
         
@@ -850,37 +746,30 @@
           out_unnest %>%
           group_by(id) %>%
           ## sum up the sums of squared errors across partitions
-          summarise(across(e0:e8_nFit, ~sd(.x))) %>%
+          summarise(across(e1:e8, ~sd(.x))) %>%
           ## calculate average CV error:
           # summarise(across(e1:e2, ~mean(.x)))
-          pivot_longer(cols = e0:e8_nFit, names_to = "eq", values_to = "sse") %>%
-          full_join(maxmin_c, by = join_by(id)) %>% 
-          mutate(n_sse = sse/(max_c - min_c)) %>% 
+          pivot_longer(cols = e1:e8, names_to = "eq", values_to = "sse") %>%
           group_by(eq) %>%
           summarize(rmse_mean = mean(sse),
                     rmse_n = n(),
                     rmse_sd = sd(sse),
-                    rmse_se = rmse_sd/sqrt(rmse_n),
-                    nrmse_mean = mean(n_sse),
-                    nrmse_sd = sd(n_sse),
-                    nrmse_se = nrmse_sd/sqrt(rmse_n)) %>%
+                    rmse_se = rmse_sd/sqrt(rmse_n)) %>%
           mutate(alpha = 0.05,
                  deg_fr = rmse_n - 1,
                  t_score = qt(p = alpha/2, df = deg_fr, lower.tail = F),
                  margin_err = t_score * rmse_se,
-                 rmse_ci_lower = rmse_mean - margin_err,
-                 rmse_ci_upper = rmse_mean + margin_err,
-                 nrmse_ci_lower = nrmse_mean - margin_err,
-                 nrmse_ci_upper = nrmse_mean + margin_err) %>% 
+                 ci_lower = rmse_mean - margin_err,
+                 ci_upper = rmse_mean + margin_err) %>% 
           mutate(df = as.character(df_list_cv1[[i]][1, "df"]),
                  c0_source = "baseflow",
                  c0_value = c0_set)
         
-        # Aggregate the outputs
-        out1_c0_1 <- bind_rows(out1_c0_1, out2)
+          # Aggregate the outputs
+          out1_c0_1 <- bind_rows(out1_c0_1, out2)
       }
       
-      #### Second time with second c0 value ----
+      # Second time with second c0 value
       # Set c0
       c0_set <- c0_wd
       
@@ -889,67 +778,12 @@
         
         # Run cross-validation  
         doParallel::registerDoParallel()
-        
-        # Split smaller grab sample df slightly differently than 15-min data set
-        if(df_list_cv1[[i]]$df[[1]] == "lt_grab"){
-          
-          # Set sample sizes of analysis and assessment splits; 
-          # We will make the minimum sample size for analysis = 20
-          initial_n = initial(nrow(df_list_cv1[[i]])/2)
-          if(initial_n < 20){
-            intial_n = 20
-          }
-          assess_n = ceiling(initial_n/3)
-          skip_n = 1
-          
-          # Create splits
-          splits <- rsample::rolling_origin(df_list_cv1[[i]],
-                                            initial = initial_n,
-                                            assess = assess_n,
-                                            skip = skip_n)
-          
-          # Pull min and max for each split for NRMSE later
-          maxmin_c <-
-            splits %>% 
-            mutate(assessments = map(splits, assessment)) %>%
-            unnest(assessments) %>%
-            summarise(min_c = min(c), 
-                      max_c = max(c), 
-                      .by = id)
-          
-          # Split larger 15-min dataset   
-        } else {
-          
-          # 1 day = 24 * 60 / 15 = 96 rows
-          # 14 days = 96 * 14 = 1344
-          # 30 days = 96 * 30 = 2880
-          # 3 months-ish or 300 days = 2880 * 3
-          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
-          assess_n = ceiling(initial_n/3)
-          skip_n = 2880
-          
-          splits <- rsample::rolling_origin(df_list_cv1[[i]],
-                                            initial = initial_n,
-                                            assess = assess_n,
-                                            skip = skip_n)
-          
-          # Pull min and max for each split for NRMSE later
-          maxmin_c <-
-            splits %>% 
-            mutate(assessments = map(splits, assessment)) %>%
-            unnest(assessments) %>%
-            summarise(min_c = min(c), 
-                      max_c = max(c), 
-                      .by = id)
-        }
-        
-        # Estimate the cv on all splits
-        out <-
-          splits %>% 
+        out <- vfold_cv(df_list_cv1[[i]],
+                        v = 10,
+                        repeats = 10) %>% 
+          ## estimate the cv on all of the partitions
           mutate(err = map(splits,
-                           possibly_cv_mods_c0)) %>% 
-          # Remove models with errors (typically singular gradient errors)
-          compact() %>% 
+                           cv_mods_c0)) %>% 
           ## drop the splits column (THIS WAS NECESSARY FOR THE LARGER DATASETS; OTHERWISE CODE GOT STUCK HERE)
           select(-splits)
         
@@ -963,133 +797,48 @@
           out_unnest %>%
           group_by(id) %>%
           ## sum up the sums of squared errors across partitions
-          summarise(across(e2:e8_nFit, ~sd(.x))) %>%
+          summarise(across(e2:e8, ~sd(.x))) %>%
           ## calculate average CV error:
           # summarise(across(e1:e2, ~mean(.x)))
-          pivot_longer(cols = e2:e8_nFit, names_to = "eq", values_to = "sse") %>%
-          full_join(maxmin_c, by = join_by(id)) %>% 
-          mutate(n_sse = sse/(max_c - min_c)) %>% 
+          pivot_longer(cols = e2:e8, names_to = "eq", values_to = "sse") %>%
           group_by(eq) %>%
           summarize(rmse_mean = mean(sse),
                     rmse_n = n(),
                     rmse_sd = sd(sse),
-                    rmse_se = rmse_sd/sqrt(rmse_n),
-                    nrmse_mean = mean(n_sse),
-                    nrmse_sd = sd(n_sse),
-                    nrmse_se = nrmse_sd/sqrt(rmse_n)) %>%
+                    rmse_se = rmse_sd/sqrt(rmse_n)) %>%
           mutate(alpha = 0.05,
                  deg_fr = rmse_n - 1,
                  t_score = qt(p = alpha/2, df = deg_fr, lower.tail = F),
                  margin_err = t_score * rmse_se,
-                 rmse_ci_lower = rmse_mean - margin_err,
-                 rmse_ci_upper = rmse_mean + margin_err,
-                 nrmse_ci_lower = nrmse_mean - margin_err,
-                 nrmse_ci_upper = nrmse_mean + margin_err) %>% 
+                 ci_lower = rmse_mean - margin_err,
+                 ci_upper = rmse_mean + margin_err) %>% 
           mutate(df = as.character(df_list_cv1[[i]][1, "df"]),
                  c0_source = "wet_deposition",
                  c0_value = c0_set)
         
         # Aggregate the outputs
         out1_c0_2 <- bind_rows(out1_c0_2, out2)
-      }            
-    
-    ### REDUCED REPS OF THE 15-min DATA ----
+      }      
+  
+  
+  
     # USE THIS FOR THE REDUCED REPS OF THE 15-min DATA (e.g., df_15min_daily, etc.)
-      
-      #### First time with one c0 value ----
+      # First time with one c0 value
       # Set c0
       c0_set <- c0_bf
       
       out2_c0_1 <- tibble()
       for(i in 1:length(df_list_cv2)) {  
-  
-        # Run cross-validation  
-        doParallel::registerDoParallel()              
         
         # Loop through the lists of dataframes    
         out_sub <- tibble()
-        maxmin_c_sub <- tibble()
         for (j in 1:length(df_list_cv2[[i]])) {
-          
-          # # Split larger daily sample df slightly differently than smaller dataset
-          if(df_list_cv2[[i]][[j]]$df[[1]] == "daily") {
-            
-            # Set sample sizes of analysis and assessment splits; 
-            # We will make the minimum sample size for analysis = 20
-            initial_n = ceiling(nrow(df_list_cv2[[i]][[j]])/2)
-            assess_n = ceiling(initial_n/3)
-            skip_n = 30
-            
-            splits <- rsample::rolling_origin(df_list_cv2[[i]][[j]],
-                                              initial = initial_n,
-                                              assess = assess_n,
-                                              skip = skip_n)
-            
-            # Pull min and max for each split for NRMSE later
-            maxmin_c <-
-              splits %>% 
-              mutate(assessments = map(splits, assessment)) %>%
-              unnest(assessments) %>%
-              summarise(min_c = min(c), 
-                        max_c = max(c), 
-                        .by = id) %>% 
-              mutate(df_rep = j)
-          
-          # Split weekly datasets  
-          } else if(df_list_cv2[[i]][[j]]$df[[1]] == "weekly"){
-            
-            initial_n = ceiling(nrow(df_list_cv2[[i]][[j]])/2)
-            assess_n = ceiling(initial_n/3)
-            skip_n = 4
-            
-            splits <- rsample::rolling_origin(df_list_cv2[[i]][[j]],
-                                              initial = initial_n,
-                                              assess = assess_n,
-                                              skip = skip_n)
-            
-            # Pull min and max for each split for NRMSE later
-            maxmin_c <-
-              splits %>% 
-              mutate(assessments = map(splits, assessment)) %>%
-              unnest(assessments) %>%
-              summarise(min_c = min(c), 
-                        max_c = max(c), 
-                        .by = id) %>% 
-              mutate(df_rep = j) 
-            
-          # Split monthly datasets  
-          } else {
-            
-            initial_n = ceiling(nrow(df_list_cv2[[i]][[j]])/2)
-            if(initial_n < 20){
-              intial_n = 20
-            }
-            assess_n = ceiling(initial_n/3)
-            skip_n = 0
-            
-            splits <- rsample::rolling_origin(df_list_cv2[[i]][[j]],
-                                              initial = initial_n,
-                                              assess = assess_n,
-                                              skip = skip_n)
-            
-            # Pull min and max for each split for NRMSE later
-            maxmin_c <-
-              splits %>% 
-              mutate(assessments = map(splits, assessment)) %>%
-              unnest(assessments) %>%
-              summarise(min_c = min(c), 
-                        max_c = max(c), 
-                        .by = id) %>% 
-              mutate(df_rep = j)             
-          }
-          
-          out <- 
-            splits %>% 
+          out <- vfold_cv(df_list_cv2[[i]][[j]],
+                          v = 10,
+                          repeats = 10) %>% 
             ## estimate the cv on all of the partitions
             mutate(err = map(splits,
-                             possibly_cv_mods)) %>% 
-            # Remove models with errors (typically singular gradient errors)
-            compact() %>% 
+                             cv_mods)) %>% 
             ## drop the splits column (THIS WAS NECESSARY FOR THE LARGER DATASETS; OTHERWISE CODE GOT STUCK HERE)
             select(-splits)
           
@@ -1100,7 +849,6 @@
             mutate(df_rep = j)
           
           out_sub <- bind_rows(out_sub, out_unnest)
-          maxmin_c_sub <- bind_rows(maxmin_c_sub, maxmin_c)
         }
         
         # get the average cross-validation error for each model: 
@@ -1108,51 +856,36 @@
           out_sub %>%
           group_by(df_rep, id) %>%
           ## sum up the sums of squared errors across partitions
-          summarise(across(e0:e8_nFit, ~sd(.x))) %>%
+          summarise(across(e1:e8, ~sd(.x))) %>%
           ## calculate average CV error:
           # summarise(across(e1:e2, ~mean(.x)))
-          pivot_longer(cols = e0:e8_nFit, names_to = "eq", values_to = "sse") %>%
-          full_join(maxmin_c_sub, by = join_by(df_rep, id)) %>% 
-          mutate(n_sse = sse/(max_c - min_c)) %>%
+          pivot_longer(cols = e1:e8, names_to = "eq", values_to = "sse") %>%
           group_by(df_rep, eq) %>%
           summarize(rmse_mean = mean(sse),
                     rmse_n = n(),
                     rmse_sd = sd(sse),
-                    rmse_se = rmse_sd/sqrt(rmse_n),
-                    nrmse_mean = mean(n_sse),
-                    nrmse_sd = sd(n_sse),
-                    nrmse_se = nrmse_sd/sqrt(rmse_n)) %>%
+                    rmse_se = rmse_sd/sqrt(rmse_n)) %>%
           mutate(alpha = 0.05,
                  deg_fr = rmse_n - 1,
                  t_score = qt(p = alpha/2, df = deg_fr, lower.tail = F),
                  margin_err = t_score * rmse_se,
-                 rmse_ci_lower = rmse_mean - margin_err,
-                 rmse_ci_upper = rmse_mean + margin_err,
-                 nrmse_ci_lower = nrmse_mean - margin_err,
-                 nrmse_ci_upper = nrmse_mean + margin_err) %>%
+                 ci_lower = rmse_mean - margin_err,
+                 ci_upper = rmse_mean + margin_err) %>%
           group_by(eq) %>%
           summarize(rmse_mean_2 = mean(rmse_mean),
                     rmse_n_2 = n(),
                     rmse_sd_2 = sd(rmse_mean),
-                    rmse_se_2 =  rmse_sd_2/sqrt(rmse_n_2),
-                    nrmse_mean_2 = mean(nrmse_mean),
-                    nrmse_sd_2 = sd(nrmse_mean),
-                    nrmse_se_2 = nrmse_sd_2/sqrt(rmse_n_2)) %>%
+                    rmse_se_2 = rmse_sd_2/sqrt(rmse_n_2)) %>%
           mutate(alpha = 0.05,
                  deg_fr = rmse_n_2 - 1,
                  t_score = qt(p = alpha/2, df = deg_fr, lower.tail = F),
                  margin_err = t_score * rmse_se_2,
-                 rmse_ci_lower = rmse_mean_2 - margin_err,
-                 rmse_ci_upper = rmse_mean_2 + margin_err,
-                 nrmse_ci_lower = nrmse_mean_2 - margin_err,
-                 nrmse_ci_upper = nrmse_mean_2 + margin_err) %>%
+                 ci_lower = rmse_mean_2 - margin_err,
+                 ci_upper = rmse_mean_2 + margin_err) %>%
           rename(rmse_mean = rmse_mean_2,
                  rmse_n = rmse_n_2,
                  rmse_sd = rmse_sd_2,
-                 rmse_se = rmse_se_2,
-                 nrmse_mean = nrmse_mean_2,
-                 nrmse_sd = nrmse_sd_2,
-                 nrmse_se = nrmse_se_2) %>%
+                 rmse_se = rmse_se_2) %>%
           mutate(method = "reps_separate") %>% 
           mutate(df = as.character(df_list_cv2[[i]][[1]][1, "df"]),
                  c0_source = "baseflow",
@@ -1162,7 +895,7 @@
         out2_c0_1 <- bind_rows(out2_c0_1, out2)
       }
       
-      #### Second time with second c0 value ----
+      # Second time with second c0 value
       # Set c0
       c0_set <- c0_wd
       
@@ -1171,88 +904,13 @@
         
         # Loop through the lists of dataframes    
         out_sub <- tibble()
-        maxmin_c_sub <- tibble()
         for (j in 1:length(df_list_cv2[[i]])) {
-          
-          # Split larger daily sample df slightly differently than smaller dataset
-          if(df_list_cv2[[i]][[j]]$df[[1]] == "daily") {
-            
-            # Set sample sizes of analysis and assessment splits; 
-            # We will make the minimum sample size for analysis = 20
-            initial_n = ceiling(nrow(df_list_cv2[[i]][[j]])/2)
-            assess_n = ceiling(initial_n/3)
-            skip_n = 30
-            
-            splits <- rsample::rolling_origin(df_list_cv2[[i]][[j]],
-                                              initial = initial_n,
-                                              assess = assess_n,
-                                              skip = skip_n)
-            
-            # Pull min and max for each split for NRMSE later
-            maxmin_c <-
-              splits %>% 
-              mutate(assessments = map(splits, assessment)) %>%
-              unnest(assessments) %>%
-              summarise(min_c = min(c), 
-                        max_c = max(c), 
-                        .by = id) %>% 
-              mutate(df_rep = j)
-            
-            # Split weekly datasets  
-          } else if(df_list_cv2[[i]][[j]]$df[[1]] == "weekly"){
-            
-            initial_n = ceiling(nrow(df_list_cv2[[i]][[j]])/2)
-            assess_n = ceiling(initial_n/3)
-            skip_n = 4
-            
-            splits <- rsample::rolling_origin(df_list_cv2[[i]][[j]],
-                                              initial = initial_n,
-                                              assess = assess_n,
-                                              skip = skip_n)
-            
-            # Pull min and max for each split for NRMSE later
-            maxmin_c <-
-              splits %>% 
-              mutate(assessments = map(splits, assessment)) %>%
-              unnest(assessments) %>%
-              summarise(min_c = min(c), 
-                        max_c = max(c), 
-                        .by = id) %>% 
-              mutate(df_rep = j) 
-            
-            # Split monthly datasets  
-          } else {
-            
-            initial_n = ceiling(nrow(df_list_cv2[[i]][[j]])/2)
-            if(initial_n < 20){
-              intial_n = 20
-            }
-            assess_n = ceiling(initial_n/3)
-            skip_n = 0
-            
-            splits <- rsample::rolling_origin(df_list_cv2[[i]][[j]],
-                                              initial = initial_n,
-                                              assess = assess_n,
-                                              skip = skip_n)
-            
-            # Pull min and max for each split for NRMSE later
-            maxmin_c <-
-              splits %>% 
-              mutate(assessments = map(splits, assessment)) %>%
-              unnest(assessments) %>%
-              summarise(min_c = min(c), 
-                        max_c = max(c), 
-                        .by = id) %>% 
-              mutate(df_rep = j)             
-          }
-          
-          out <- 
-            splits %>% 
+          out <- vfold_cv(df_list_cv2[[i]][[j]],
+                          v = 10,
+                          repeats = 10) %>% 
             ## estimate the cv on all of the partitions
             mutate(err = map(splits,
-                             possibly_cv_mods_c0)) %>% 
-            # Remove models with errors (typically singular gradient errors)
-            compact() %>% 
+                             cv_mods_c0)) %>% 
             ## drop the splits column (THIS WAS NECESSARY FOR THE LARGER DATASETS; OTHERWISE CODE GOT STUCK HERE)
             select(-splits)
           
@@ -1263,7 +921,6 @@
             mutate(df_rep = j)
           
           out_sub <- bind_rows(out_sub, out_unnest)
-          maxmin_c_sub <- bind_rows(maxmin_c_sub, maxmin_c)
         }
         
         # get the average cross-validation error for each model: 
@@ -1271,51 +928,36 @@
           out_sub %>%
           group_by(df_rep, id) %>%
           ## sum up the sums of squared errors across partitions
-          summarise(across(e2:e8_nFit, ~sd(.x))) %>%
+          summarise(across(e2:e8, ~sd(.x))) %>%
           ## calculate average CV error:
           # summarise(across(e1:e2, ~mean(.x)))
-          pivot_longer(cols = e2:e8_nFit, names_to = "eq", values_to = "sse") %>%
-          full_join(maxmin_c_sub, by = join_by(df_rep, id)) %>% 
-          mutate(n_sse = sse/(max_c - min_c)) %>%
+          pivot_longer(cols = e2:e8, names_to = "eq", values_to = "sse") %>%
           group_by(df_rep, eq) %>%
           summarize(rmse_mean = mean(sse),
                     rmse_n = n(),
                     rmse_sd = sd(sse),
-                    rmse_se = rmse_sd/sqrt(rmse_n),
-                    nrmse_mean = mean(n_sse),
-                    nrmse_sd = sd(n_sse),
-                    nrmse_se = nrmse_sd/sqrt(rmse_n)) %>%
+                    rmse_se = rmse_sd/sqrt(rmse_n)) %>%
           mutate(alpha = 0.05,
                  deg_fr = rmse_n - 1,
                  t_score = qt(p = alpha/2, df = deg_fr, lower.tail = F),
                  margin_err = t_score * rmse_se,
-                 rmse_ci_lower = rmse_mean - margin_err,
-                 rmse_ci_upper = rmse_mean + margin_err,
-                 nrmse_ci_lower = nrmse_mean - margin_err,
-                 nrmse_ci_upper = nrmse_mean + margin_err) %>%
+                 ci_lower = rmse_mean - margin_err,
+                 ci_upper = rmse_mean + margin_err) %>%
           group_by(eq) %>%
           summarize(rmse_mean_2 = mean(rmse_mean),
                     rmse_n_2 = n(),
                     rmse_sd_2 = sd(rmse_mean),
-                    rmse_se_2 =  rmse_sd_2/sqrt(rmse_n_2),
-                    nrmse_mean_2 = mean(nrmse_mean),
-                    nrmse_sd_2 = sd(nrmse_mean),
-                    nrmse_se_2 = nrmse_sd_2/sqrt(rmse_n_2)) %>%
+                    rmse_se_2 = rmse_sd_2/sqrt(rmse_n_2)) %>%
           mutate(alpha = 0.05,
                  deg_fr = rmse_n_2 - 1,
                  t_score = qt(p = alpha/2, df = deg_fr, lower.tail = F),
                  margin_err = t_score * rmse_se_2,
-                 rmse_ci_lower = rmse_mean_2 - margin_err,
-                 rmse_ci_upper = rmse_mean_2 + margin_err,
-                 nrmse_ci_lower = nrmse_mean_2 - margin_err,
-                 nrmse_ci_upper = nrmse_mean_2 + margin_err) %>%
+                 ci_lower = rmse_mean_2 - margin_err,
+                 ci_upper = rmse_mean_2 + margin_err) %>%
           rename(rmse_mean = rmse_mean_2,
                  rmse_n = rmse_n_2,
                  rmse_sd = rmse_sd_2,
-                 rmse_se = rmse_se_2,
-                 nrmse_mean = nrmse_mean_2,
-                 nrmse_sd = nrmse_sd_2,
-                 nrmse_se = nrmse_se_2) %>%
+                 rmse_se = rmse_se_2) %>%
           mutate(method = "reps_separate") %>% 
           mutate(df = as.character(df_list_cv2[[i]][[1]][1, "df"]),
                  c0_source = "wet_deposition",
@@ -1325,7 +967,7 @@
         out2_c0_2 <- bind_rows(out2_c0_2, out2)
       }      
 
-      #### Write to CSV for future use ----
+      # Write to CSV for future use
       out1_c0_1 %>%
         bind_rows(out1_c0_2,
                   out2_c0_1,

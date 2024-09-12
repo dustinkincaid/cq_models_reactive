@@ -10,7 +10,7 @@
   library("minpack.lm")   # alternative to 'nls'; much more flexible!
   
 # Which site and solute would you like to model?
-  site_choice <- "BDC"
+  site_choice <- "WHB"
   sol_choice <- "no3"
   grab_choice <- "no3_grab"
 
@@ -225,7 +225,7 @@
           print(sprintf("RMSE Eq 1-1: %s", RMSE(summary(eq1_fit)$residuals)))
           
           # Don't force n
-          eq1_nFit_fit <- nlsLM(c ~ eq1(q, a, n), data=df_list[[i]], start=list(a=380, n=0.1))
+          eq1_nFit_fit <- nlsLM(c ~ eq1(q, a, n), data=df_list[[i]], start=list(a=380, n=0.5))
           eq1_nFit_resids <- 
             tibble(resids = as.numeric(residuals(eq1_nFit_fit)),
                    q = df_list[[i]]$q,
@@ -260,7 +260,7 @@
                    n_source = "fit",
                    param_n = eq2_nFit_fit$m$getPars()[[2]],
                    df = df_list[[i]]$df)  
-          print(sprintf("RMSE Eq 2-1: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
+          print(sprintf("RMSE Eq 2-2: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
         
         # Equation 3/Model 3a: Same as models 1 or 2 except one assumes concentration changes little as compared to volume
         eq3 <- function(q, f,e) (f-e*log(q))
@@ -290,7 +290,7 @@
           print(sprintf("RMSE Eq 4-1: %s", RMSE(summary(eq4_fit)$residuals)))
           
           # Don't force n
-          eq4_nFit_fit <- nlsLM(c ~ eq4(q, h, g, n), data=df_list[[i]], start=list(h=175, g=0.00001, n=0.1))
+          eq4_nFit_fit <- nlsLM(c ~ eq4(q, h, g, n), data=df_list[[i]], start=list(h=175, g=0.00001, n=0.5))
           eq4_nFit_resids <- 
             tibble(resids = as.numeric(residuals(eq4_nFit_fit)),
                    q = df_list[[i]]$q,
@@ -529,7 +529,7 @@
                n_source = "fit",
                param_n = eq2_nFit_fit$m$getPars()[[2]],
                df = df_list[[i]]$df)  
-      print(sprintf("RMSE Eq 2-1: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
+      print(sprintf("RMSE Eq 2-2: %s", RMSE(summary(eq2_nFit_fit)$residuals)))          
       
       # Equations 5, 5a/Model 3c: Same as model 2 except one assumes volume changes little as compared to concentration
       # Force n
@@ -656,12 +656,12 @@
       eq0_fit <- lm(log10(c) ~ log10(q), data=rsample::analysis(split))
       eq1_fit <- nlsLM(c ~ eq1(q, a, n=rec_n), data=rsample::analysis(split), start=list(a=380))
       # eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=0.1))
-      eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=1))
+      eq1_n_fit <- nlsLM(c ~ eq1(q, a, n), data=rsample::analysis(split), start=list(a=380, n=0.5))
       eq2_fit <- nlsLM(c ~ eq2(q, a, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(a=380))
       eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
       eq3_fit <- nlsLM(c ~ eq3(q, f, e), data=rsample::analysis(split), start=list(f=100, e=100))
       eq4_fit <- nlsLM(c ~ eq4(q, h, g, n=rec_n), data=rsample::analysis(split), start=list(h=175, g=0.00001))
-      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.1))
+      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.5))
       eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
       eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
       eq6_fit <- nlsLM(c ~ eq6(q, m, j, n=rec_n), data=rsample::analysis(split), start=list(m=100, j=100))
@@ -895,7 +895,7 @@
           
           # Set sample sizes of analysis and assessment splits; 
           # We will make the minimum sample size for analysis = 20
-          initial_n = initial(nrow(df_list_cv1[[i]])/2)
+          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
           if(initial_n < 20){
             intial_n = 20
           }

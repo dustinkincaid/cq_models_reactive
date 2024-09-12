@@ -10,9 +10,9 @@
   library("minpack.lm")   # alternative to 'nls'; much more flexible!
   
 # Which site and solute would you like to model?
-  site_choice <- "BDC"
-  sol_choice <- "no3"
-  grab_choice <- "no3_grab"
+  site_choice <- "HBF"
+  sol_choice <- "doc"
+  grab_choice <- "doc_grab"
 
 # Options ----
   set.seed(1217)
@@ -290,7 +290,7 @@
           print(sprintf("RMSE Eq 4-1: %s", RMSE(summary(eq4_fit)$residuals)))
           
           # Don't force n
-          eq4_nFit_fit <- nlsLM(c ~ eq4(q, h, g, n), data=df_list[[i]], start=list(h=175, g=0.00001, n=0.1))
+          eq4_nFit_fit <- nlsLM(c ~ eq4(q, h, g, n), data=df_list[[i]], start=list(h=175, g=0.00001, n=0.5))
           eq4_nFit_resids <- 
             tibble(resids = as.numeric(residuals(eq4_nFit_fit)),
                    q = df_list[[i]]$q,
@@ -346,7 +346,7 @@
           print(sprintf("RMSE Eq 6-1: %s", RMSE(summary(eq6_fit)$residuals)))
           
           # Don't force n
-          eq6_nFit_fit <- nlsLM(c ~ eq6(q, m, j, n), data=df_list[[i]], start=list(m=100, j=100, n = 0.1))
+          eq6_nFit_fit <- nlsLM(c ~ eq6(q, m, j, n), data=df_list[[i]], start=list(m=100, j=100, n = 0.5))
           eq6_nFit_resids <- 
             tibble(resids = as.numeric(residuals(eq6_nFit_fit)),
                    q = df_list[[i]]$q,
@@ -661,11 +661,11 @@
       eq2_n_fit <- nlsLM(c ~ eq2(q, a, n, c0=c0_set), data=rsample::analysis(split), start=list(a=380, n=1))
       eq3_fit <- nlsLM(c ~ eq3(q, f, e), data=rsample::analysis(split), start=list(f=100, e=100))
       eq4_fit <- nlsLM(c ~ eq4(q, h, g, n=rec_n), data=rsample::analysis(split), start=list(h=175, g=0.00001))
-      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.1))
+      eq4_n_fit <- nlsLM(c ~ eq4(q, h, g, n), data=rsample::analysis(split), start=list(h=175, g=0.00001, n=0.5))
       eq5_fit <- nlsLM(c ~ eq5(q, h, g, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001))
       eq5_n_fit <- nlsLM(c ~ eq5(q, h, g, n, c0=c0_set), data=rsample::analysis(split), start=list(h=160, g=0.00001, n=1))
       eq6_fit <- nlsLM(c ~ eq6(q, m, j, n=rec_n), data=rsample::analysis(split), start=list(m=100, j=100))
-      eq6_n_fit <- nlsLM(c ~ eq6(q, m, j, n), data=rsample::analysis(split), start=list(m=100, j=100, n = 0.1))
+      eq6_n_fit <- nlsLM(c ~ eq6(q, m, j, n), data=rsample::analysis(split), start=list(m=100, j=100, n = 0.5))
       eq7_fit <- nlsLM(c ~ eq7(q, s, b, n=rec_n), data=rsample::analysis(split), start=list(s=175, b=0.00001))
       eq7_n_fit <- nlsLM(c ~ eq7(q, s, b, n), data=rsample::analysis(split), start=list(s=175, b=0.00001, n = 0.1))
       eq8_fit <- nlsLM(c ~ eq8(q, s, b, n=rec_n, c0=c0_set), data=rsample::analysis(split), start=list(s=175, b=0.00001))
@@ -895,7 +895,7 @@
           
           # Set sample sizes of analysis and assessment splits; 
           # We will make the minimum sample size for analysis = 20
-          initial_n = initial(nrow(df_list_cv1[[i]])/2)
+          initial_n = ceiling(nrow(df_list_cv1[[i]])/2)
           if(initial_n < 20){
             intial_n = 20
           }
